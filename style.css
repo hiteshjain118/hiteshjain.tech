@@ -171,6 +171,19 @@ h2 {
   border-bottom-color: color-mix(in srgb, var(--accent) 40%, transparent);
 }
 
+/* offsite pieces get a quiet outbound marker */
+.post-title.ext::after {
+  content: "↗";
+  display: inline-block;
+  margin-left: 0.3em;
+  font-size: 0.72em;
+  vertical-align: 0.15em;
+  color: var(--faint);
+  font-weight: 400;
+}
+
+.post-title.ext:hover::after { color: var(--accent); }
+
 .post-meta {
   font-size: 0.83rem;
   color: var(--faint);

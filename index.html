@@ -28,7 +28,7 @@
       <p>Since Meta I have cofounded two companies. The first was embedding models and low-latency semantic search: continual pretraining and contrastive training of a ModernBERT backbone for the commerce domain, and the serving stack to put it in front of real traffic at a P95 of about 18 ms end to end, on a single A10. The two pieces below came out of that work.</p>
       <p>The second grew out of the tokenmaxxing days, when Divy Vasal — a friend from college — and I were pointing coding agents at everything and watching the bills climb. I wanted to know where the money was actually going, so I parsed a month of my own Claude Code logs: 181 sessions, 25,564 model calls. About 29M unique tokens were billed as 4.35B, because every turn re-sends the whole context. You don't pay to generate, you pay to re-read. The hidden reasoning I never see was 84% of what the model wrote and roughly 60% of what it re-read.</p>
       <p>We also tested what agents could do once we stopped rationing them. A finance agent harness — specialist agents over SEC filings, news, stocks and options, with the industry's conventions encoded as skills — reached 82.6% on Vals AI Finance Agent v2 and 89.3% on FinanceBench, at $0.13 a question. After that, four agents ran a fine-tuning sweep by themselves: 108 LoRA experiments over a long weekend on an open 20B model, HotpotQA exact match from 0.13 to 0.72. They proposed each run, scored it, and chose the next one. I read the log and broke ties.</p>
-      <p>Both worked. Neither was something you could leave running — the agents cost around $1.1K a day, per engineer. We started the company in June 2026, on that thesis. Agent workloads are not ordinary API traffic: hundreds of turns, context that grows with every one of them, far more read than written. Serve that on open models at high throughput and stop charging for the same context over and over, and the loops that are too expensive to leave on become ordinary ones. Frontier intelligence should be cheap enough that everybody gets to leave the loop running.</p>
+      <p>Both worked. Neither was something you could leave running — the agents cost around $1.1K a day, per engineer. We started <a href="https://www.coralbricks.ai" target="_blank" rel="noopener">Coral Bricks</a> in June 2026, on that thesis. Agent workloads are not ordinary API traffic: hundreds of turns, context that grows with every one of them, far more read than written. Serve that on open models at high throughput and stop charging for the same context over and over, and the loops that are too expensive to leave on become ordinary ones. Frontier intelligence should be cheap enough that everybody gets to leave the loop running.</p>
       <p>I also invest a little, in a handful of early companies.</p>
     </div>
 
@@ -41,6 +41,36 @@
   <section id="writing">
     <h2>Writing</h2>
     <ul class="posts">
+
+      <li>
+        <a class="post-title ext" href="https://www.coralbricks.ai/research/lora-trajectory/" target="_blank" rel="noopener">4 LLM agents run 108 LoRA experiments over a long weekend</a>
+        <p class="post-meta">June 2026<span class="sep">·</span>coralbricks.ai</p>
+        <p class="excerpt">Four agents proposed, ran and scored 108 LoRA fine-tuning experiments on an open 20B model over three days. HotpotQA exact match went from 0.13 to 0.72. I stayed the overseer — read the log, broke ties, killed the runs wasting GPU.</p>
+      </li>
+
+      <li>
+        <a class="post-title ext" href="https://post-training.aitinkerers.org/p/how-to-write-a-winning-agent-harness-for-your-domain" target="_blank" rel="noopener">Write Your Own Winning Agent Harness: Skills, Dedicated Tools, and the Coral Runtime</a>
+        <p class="post-meta">June 2026<span class="sep">·</span>with Divy Vasal<span class="sep">·</span>AI Tinkerers</p>
+        <p class="excerpt">The build manual for a finance agent harness. The retrieval ablation showed most of the 38-point gain over the reference harness comes from skills and dedicated tools — not the model, and not retrieval.</p>
+      </li>
+
+      <li>
+        <a class="post-title ext" href="https://www.coralbricks.ai/blog/coral-retrieval-vs-full-stack" target="_blank" rel="noopener">Just the Retrieval Tools? Isolating What Closes the Gap on Vals AI Finance Agent v2</a>
+        <p class="post-meta">June 2026<span class="sep">·</span>with Divy Vasal<span class="sep">·</span>coralbricks.ai</p>
+        <p class="excerpt">Three configurations, one model, 27 questions. How much of the gain over the reference harness is retrieval, and how much is everything else in the stack.</p>
+      </li>
+
+      <li>
+        <a class="post-title ext" href="https://www.coralbricks.ai/blog/finance-benchmarks" target="_blank" rel="noopener">State-of-the-art on public Financial Benchmarks at $0.13 per Question</a>
+        <p class="post-meta">June 2026<span class="sep">·</span>with Divy Vasal<span class="sep">·</span>coralbricks.ai</p>
+        <p class="excerpt">82.6% on Vals AI Finance Agent v2, 89.3% on FinanceBench, at thirteen cents a question — and what running all three benchmarks at once revealed about convention as configuration.</p>
+      </li>
+
+      <li>
+        <a class="post-title ext" href="https://www.coralbricks.ai/blog/claude-code-token-xray" target="_blank" rel="noopener">Claude Code felt slow. So I X-rayed a month of my own logs.</a>
+        <p class="post-meta">May 2026<span class="sep">·</span>coralbricks.ai</p>
+        <p class="excerpt">181 sessions and 25,564 model calls broken into tokens, time and cost. About 29M unique tokens were billed as 4.35B, because every turn re-sends the whole context. You don't pay to generate, you pay to re-read.</p>
+      </li>
 
       <li>
         <a class="post-title" href="writing/embedding-inference.html">Domain-Specific Embedding Inference with Sub-20ms Tail Latency</a>
@@ -62,7 +92,7 @@
     <ul class="roles">
       <li>
         <span class="when">Jun 2026 —</span>
-        <span class="what"><strong>Cofounder</strong><span>AI inference infrastructure for agent workloads</span></span>
+        <span class="what"><strong>Cofounder</strong><span>Coral Bricks — AI inference infrastructure for agent workloads</span></span>
       </li>
       <li>
         <span class="when">2025 – 2026</span>
