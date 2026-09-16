@@ -10,17 +10,35 @@
 <meta property="og:title" content="Hitesh Jain">
 <meta property="og:description" content="AI inference. Previously 13 years at Meta, most recently Principal Engineer in Generative AI.">
 <meta property="og:url" content="https://hiteshjain.tech/">
+<meta property="og:image" content="https://hiteshjain.tech/images/hitesh.jpg">
 <meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://hiteshjain.tech/images/hitesh.jpg">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⌘</text></svg>">
+<meta name="theme-color" content="#07080c">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap">
 <link rel="stylesheet" href="style.css">
+<script>document.documentElement.classList.add("js");</script>
 </head>
 <body>
 
 <div class="wrap">
 
   <header class="site">
-    <h1>Hitesh Jain</h1>
-    <p class="tagline">AI inference<span class="sep">·</span>Ex-Meta<span class="sep">·</span>IIT Roorkee</p>
+    <div class="hero">
+      <div class="hero-portrait">
+        <img src="images/hitesh.jpg"
+             srcset="images/hitesh@1x.jpg 600w, images/hitesh.jpg 1200w"
+             sizes="(max-width: 34rem) 6.6rem, 8.6rem"
+             width="1200" height="1200" alt="Hitesh Jain">
+      </div>
+      <div class="hero-text">
+        <p class="status"><span class="dot"></span>Building Coral Bricks</p>
+        <h1>Hitesh Jain</h1>
+        <p class="tagline">AI inference<span class="sep">·</span>Ex-Meta<span class="sep">·</span>IIT Roorkee</p>
+      </div>
+    </div>
 
     <div class="lede">
       <p>I work on AI inference — the infrastructure that makes large models fast and affordable to run: inference engines, serving architecture, and the measurement discipline that tells you whether any of it actually got better.</p>
@@ -38,7 +56,7 @@
     </ul>
   </header>
 
-  <section id="writing">
+  <section id="writing" class="reveal">
     <h2>Writing</h2>
     <ul class="posts">
 
@@ -87,7 +105,7 @@
     </ul>
   </section>
 
-  <section id="work">
+  <section id="work" class="reveal">
     <h2>Work</h2>
     <ul class="roles">
       <li>
@@ -117,11 +135,28 @@
     </ul>
   </section>
 
-  <footer class="site">
+  <footer class="site reveal">
     <p>Hitesh Jain<span class="sep">·</span>United States</p>
   </footer>
 
 </div>
+
+<script>
+(function () {
+  var els = document.querySelectorAll('.reveal');
+  if (!('IntersectionObserver' in window) ||
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    els.forEach(function (el) { el.classList.add('in'); });
+    return;
+  }
+  var io = new IntersectionObserver(function (entries) {
+    entries.forEach(function (e) {
+      if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
+    });
+  }, { rootMargin: '0px 0px -12% 0px' });
+  els.forEach(function (el) { io.observe(el); });
+})();
+</script>
 
 </body>
 </html>
