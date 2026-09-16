@@ -88,9 +88,12 @@ header.site { padding: 5rem 0 0; }
 .hero {
   display: flex;
   align-items: center;
-  gap: 1.05rem;
+  justify-content: space-between;
+  gap: 1.25rem;
   margin-bottom: 2.4rem;
 }
+
+.hero-text { min-width: 0; }
 
 .hero-portrait {
   flex: 0 0 auto;
