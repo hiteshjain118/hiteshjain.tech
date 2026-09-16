@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Domain-Specific Embedding Inference with Sub-20ms Tail Latency — Hitesh Jain</title>
+<meta name="description" content="How we reached ~18 ms P95 API latency and ~3 ms P95 inference latency for a domain-specific ModernBERT embedding model using NVIDIA Triton Inference Server with a TensorRT runtime.">
+<link rel="canonical" href="https://hiteshjain.tech/writing/embedding-inference.html">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Domain-Specific Embedding Inference with Sub-20ms Tail Latency">
+<meta property="og:description" content="~18 ms P95 end-to-end and ~3 ms P95 inference for a ModernBERT embedding model on a single A10, using Triton and TensorRT.">
+<meta property="og:url" content="https://hiteshjain.tech/writing/embedding-inference.html">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⌘</text></svg>">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<div class="wrap">
+
+  <article>
+
+    <a class="back" href="../">← Hitesh Jain</a>
+
+    <h1>Domain-Specific Embedding Inference with Sub-20ms Tail Latency</h1>
+    <p class="byline">Hitesh Jain and Divy Vasal<span class="sep">·</span>March 2026</p>
+
+    <h2>Summary</h2>
+
+    <p>We fine-tuned a commerce-specific semantic embedding model on a ModernBERT backbone. These embeddings power product search in low-latency applications like typeahead, voice search, and recommendations. Our goal: serve shopper query embeddings with <strong>sub-20 ms P95 latency</strong> under representative load conditions, so search platforms can spend their milliseconds on filtering and reranking.</p>
+
+    <p>We achieved <strong>P95 API latency of ~18 ms</strong> and <strong>P95 inference latency of ~3 ms</strong> on a commodity GPU (A10) running at sustained load (100 QPS for 5 minutes) using NVIDIA Triton Inference Server with a TensorRT runtime.</p>
+
+    <p>This post details our test environment, compares our initial Python stack to the new Triton architecture, and explains the engineering trade-offs that unlocked these speeds.</p>
+
+    <h2>Our Workload</h2>
+
+    <p>Our typical workload involves commerce platforms sending short shopper queries between 16 and 32 tokens (e.g., "best marathon training shoes for women"). Real-time commerce search applications demand strict end-to-end embedding SLAs of 20–40 ms.</p>
+
+    <h2>Architecture</h2>
+
+    <p><strong>Two-service architecture</strong> to optimize performance and scalability: a gateway service on one host handling CPU-intensive tasks and a GPU inference server on another host focused on maximizing GPU utilization. This separation of CPU and GPU workloads offers two main advantages:</p>
+
+    <ul>
+      <li><strong>Horizontal scalability:</strong> Scale the CPU and GPU components independently based on demand.</li>
+      <li><strong>Flexible experimentation:</strong> Test new GPU inference server configurations without altering the core domain-specific logic in the gateway service.</li>
+    </ul>
+
+    <p><strong>Fixed-length sequence bucketing</strong> is a pre-processing step in the gateway that optimizes inputs for the GPU. Queries of varying lengths are sorted into "buckets" based on preset lengths (e.g., 16, 32, 64). The system then pads each query only up to its bucket's ceiling, rather than the maximum possible length. For example, a 20-token query is padded only to 32. This method is critical for minimizing batch shape variety received by the inference server, which eliminates wasted computation and is essential for maximizing GPU utilization and achieving ultra-low latency.</p>
+
+    <p>We <strong>co-located</strong> the embedding services with the load testing client to eliminate network latency associated with cross-region communication.</p>
+
+    <p>We experimented with two inference stacks:</p>
+
+    <ul>
+      <li>Fully customized Python + PyTorch</li>
+      <li>Tuned Triton + TensorRT</li>
+    </ul>
+
+    <h2>Data Flow Diagram</h2>
+
+    <figure>
+      <img src="../images/data-flow-diagram.png" alt="Embedding inference architecture showing the request flow from client through the embedding gateway to both stacks: a PyTorch inference server and a Triton inference server">
+      <figcaption>Figure 1: Embedding inference architecture showing the complete request flow from client through the embedding gateway to both stacks — Python + PyTorch inference server and Triton inference server.</figcaption>
+    </figure>
+
+    <p>Below, we detail the key technical decisions made for each implementation.</p>
+
+    <h3>Stack 1: Fully Customized Python + PyTorch</h3>
+
+    <p>We used <code>torch.compile</code> (mode <code>reduce-overhead</code>) and implemented several optimizations:</p>
+
+    <ul>
+      <li><strong>Backpressure</strong> estimates queue drain time from an exponential moving average of GPU processing rate, rejecting requests before latency spikes. A queue depth cap (2 pending batches) prevents memory pressure.</li>
+      <li><strong>CUDA graph-aware threading</strong> runs warmup in the GPU worker thread so captured graphs are available where inference executes. A <code>threading.Event</code> gate blocks requests until warmup completes.</li>
+      <li><strong>Zero-copy tensors</strong> eliminate copies end-to-end: gRPC raw bytes via <code>np.frombuffer</code> → <code>torch.from_numpy</code>, <code>torch.stack</code>/<code>torch.cat</code> at request and batch boundaries, one <code>BatchResult</code> per forward pass routed to individual futures — no per-item overhead.</li>
+    </ul>
+
+    <h3>Stack 2: Tuned Triton + TensorRT</h3>
+
+    <ul>
+      <li><strong>TensorRT + Python backend ensemble:</strong> Our model uses custom domain-specific mean pooling, which excludes structural tokens. We kept this logic in a Triton Python backend for rapid development. The transformer runs on TensorRT; the pooling step adds ~0.5 ms.</li>
+      <li><strong>TensorRT setup:</strong> We export the transformer to ONNX (FP16), then build a TensorRT engine with <code>trtexec</code> at container startup. Dynamic shapes cover batch 1–256 and sequence lengths 16–512 (load test query templates are capped at 32 tokens). The engine is cached at startup; during inference, no runtime build occurs.</li>
+      <li><strong>Multiple parallel CUDA streams:</strong> We use four parallel CUDA streams, one per model instance, to schedule incoming requests onto the GPU concurrently. More instances boost parallel execution but risk exhausting memory or degrading performance due to scheduler overhead and stream contention past ~4–8 instances. For our A10G/ModernBERT setup, four instances are optimal, providing enough parallelism for bursts at 100 QPS without memory issues or latency degradation.</li>
+    </ul>
+
+    <h2>Trade-Offs: Python + PyTorch vs Triton + TensorRT</h2>
+
+    <p>We eventually migrated from Python + PyTorch to Triton + TensorRT, reducing P95 inference latency from 7 ms to 3 ms. The key driver was increasing parallel CUDA streams from 1 to 4 for improved GPU utilization, allowing incoming load batches to be split across four model instances.</p>
+
+    <div class="table-scroll">
+    <table>
+      <thead><tr><th>Metric</th><th>Python + PyTorch</th><th>Triton + TensorRT</th></tr></thead>
+      <tbody>
+        <tr><td>P50</td><td>19.35 ms</td><td>13.47 ms</td></tr>
+        <tr><td>P95</td><td>48.51 ms</td><td>17.73 ms</td></tr>
+        <tr><td>P99</td><td>59.23 ms</td><td>26.41 ms</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <p class="note">Table 1: Python + PyTorch vs Triton + TensorRT end-to-end latencies at 100 QPS, batch size 1.</p>
+
+    <p>For those who opt to deploy their own inference servers, this is a comparison of both stacks:</p>
+
+    <div class="table-scroll">
+    <table class="prose">
+      <thead><tr><th>Aspect</th><th>Python + PyTorch</th><th>Triton + TensorRT</th></tr></thead>
+      <tbody>
+        <tr><td>Increase data parallelism from 1 to 4</td><td>Single GPU worker thread. One batch at a time.</td><td>4 parallel CUDA streams per GPU. Concurrent batches. TensorRT engine.</td></tr>
+        <tr><td>Development overhead</td><td>Familiar Python / Hugging Face helped getting started quickly</td><td>Ramp up on Triton + TensorRT C++ tooling took longer</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <p class="note">Table 2: Comparison of the Python + PyTorch and Triton + TensorRT architectures.</p>
+
+    <h2>Load Test: 100 QPS, 300 Seconds, Batch 1</h2>
+
+    <h3>Test Architecture</h3>
+
+    <p>The load test runs against the production embedding API. The request path is:</p>
+
+    <p><strong>Client (EC2, same VPC) → NLB → embedding gateway → inference server</strong></p>
+
+    <ul>
+      <li><strong>Gateway</strong> — handles authentication, rate limiting, tokenization, and request routing. It uses a process pool for CPU-bound tokenization and an async gRPC client to call the inference server.</li>
+      <li><strong>Inference server</strong> — the Triton Inference Server with our ModernBERT ensemble (TensorRT transformer + Python mean pooling) runs on a host with a single NVIDIA A10G GPU. Triton's dynamic batching and four model instances per GPU maximize throughput on the single GPU.</li>
+    </ul>
+
+    <h3>Test Configuration</h3>
+
+    <div class="table-scroll">
+    <table class="prose">
+      <thead><tr><th>Parameter</th><th>Value</th></tr></thead>
+      <tbody>
+        <tr><td>Model</td><td>ModernBERT-based, 768-dimensional</td></tr>
+        <tr><td>Mode</td><td>Query (short search queries, up to 32 tokens)</td></tr>
+        <tr><td>Target QPS</td><td>100</td></tr>
+        <tr><td>Duration</td><td>300 seconds</td></tr>
+        <tr><td>Batch size</td><td>1</td></tr>
+        <tr><td>Load source</td><td>EC2 instance in same VPC as gateway and inference server</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <p class="note">Table 3: Load test configuration parameters.</p>
+
+    <h3>Results</h3>
+
+    <p><strong>End-to-end latency:</strong></p>
+
+    <div class="table-scroll">
+    <table>
+      <thead><tr><th>Percentile</th><th>Latency</th></tr></thead>
+      <tbody>
+        <tr><td>P50</td><td>13.47 ms</td></tr>
+        <tr><td>P90</td><td>15.58 ms</td></tr>
+        <tr><td>P95</td><td>17.73 ms</td></tr>
+        <tr><td>P99</td><td>26.41 ms</td></tr>
+        <tr><td>Mean</td><td>14.21 ms</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <p class="note">Table 4: End-to-end latency distribution.</p>
+
+    <p><strong>Triton model latencies:</strong></p>
+
+    <div class="table-scroll">
+    <table>
+      <thead><tr><th>Model</th><th>P50</th><th>P90</th><th>P95</th><th>P99</th></tr></thead>
+      <tbody>
+        <tr><td>modernbert_tensorrt</td><td>2.448 ms</td><td>2.567 ms</td><td>2.601 ms</td><td>2.674 ms</td></tr>
+        <tr><td>mean_pooling</td><td>0.429 ms</td><td>0.498 ms</td><td>0.546 ms</td><td>0.765 ms</td></tr>
+        <tr><td>modernbert_ensemble</td><td>2.884 ms</td><td>3.062 ms</td><td><strong>3.128 ms</strong></td><td>3.259 ms</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <p class="note">Table 5: Server-side Triton model latencies.</p>
+
+    <blockquote>
+      <p>Note that percentiles don't add linearly, and inter-model overhead (tensor transfer, Python invocation) is not fully attributed to either model — so the ensemble latency is close to, but not exactly, the sum of the component latencies.</p>
+    </blockquote>
+
+    <p>So at batch size 1 and short sequences:</p>
+
+    <ul>
+      <li><strong>TensorRT transformer P95:</strong> ~2.6 ms</li>
+      <li><strong>Full ensemble (transformer + pooling) P95:</strong> ~3.1 ms</li>
+      <li><strong>End-to-end P95:</strong> 17.73 ms (gateway, auth, tokenization, network, inference)</li>
+    </ul>
+
+    <p>The gap between ~3 ms inference and ~18 ms end-to-end comes from tokenization, rate limiting, auth, Redis, and network — not GPU inference.</p>
+
+    <h2>Key Takeaways</h2>
+
+    <ul>
+      <li><strong>Two-tier architecture:</strong> Keep CPU and GPU workloads separate for independent scaling and cleaner experimentation — a gateway for tokenization, auth, and routing; an inference server for GPU compute.</li>
+      <li><strong>Data parallelism drives throughput:</strong> Use data parallelism (four instances per GPU) to increase GPU utilization — the main throughput driver.</li>
+      <li><strong>Python vs Triton + TensorRT:</strong> Python and Hugging Face are faster to prototype; Triton + TensorRT delivers ~3 ms P95 inference and ~18 ms end-to-end at ~100 QPS. A developer-friendly ensemble design preserves custom domain-specific pooling in Python while achieving production latency with Triton + TensorRT.</li>
+    </ul>
+
+    <h2>References</h2>
+
+    <ul>
+      <li><a href="https://github.com/triton-inference-server/server">NVIDIA Triton Inference Server</a></li>
+      <li><a href="https://github.com/triton-inference-server/tensorrt_backend">Triton TensorRT Backend</a></li>
+    </ul>
+
+  </article>
+
+  <footer class="site">
+    <p><a href="../">Hitesh Jain</a><span class="sep">·</span>March 2026</p>
+  </footer>
+
+</div>
+
+</body>
+</html>
